@@ -1,22 +1,10 @@
-const timeline = [
-    {
-        title: 'Incident Reported',
-        user: 'Sonam Dorji',
-        time: '09:30 AM',
-    },
-    {
-        title: 'Investigation Assigned',
-        user: 'HQ Safety Officer',
-        time: '10:15 AM',
-    },
-    {
-        title: 'Corrective Actions Issued',
-        user: 'Karma Wangchuk',
-        time: '02:40 PM',
-    },
-]
+import {
+    formatDate,
+} from '../../utils/formatters'
 
-export default function InvestigationTimeline() {
+export default function InvestigationTimeline({
+    items = [],
+}) {
     return (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
 
@@ -27,28 +15,46 @@ export default function InvestigationTimeline() {
             </div>
 
             <div className="space-y-6">
-                {timeline.map((item, index) => (
-                    <div
-                        key={index}
-                        className="flex gap-4"
-                    >
-                        <div className="mt-2 h-3 w-3 rounded-full bg-white" />
+                {items.length ? (
+                    items.map(
+                        (
+                            item,
+                            index
+                        ) => (
+                            <div
+                                key={
+                                    item.id ??
+                                    index
+                                }
+                                className="flex gap-4"
+                            >
+                                <div className="mt-2 h-3 w-3 rounded-full bg-white" />
 
-                        <div>
-                            <h4 className="font-medium text-white">
-                                {item.title}
-                            </h4>
+                                <div>
+                                    <h4 className="font-medium text-white">
+                                        {
+                                            item.title
+                                        }
+                                    </h4>
 
-                            <p className="mt-1 text-sm text-zinc-400">
-                                {item.user}
-                            </p>
+                                    <p className="mt-1 text-sm text-zinc-400">
+                                        {item.user}
+                                    </p>
 
-                            <p className="mt-1 text-xs text-zinc-500">
-                                {item.time}
-                            </p>
-                        </div>
-                    </div>
-                ))}
+                                    <p className="mt-1 text-xs text-zinc-500">
+                                        {formatDate(
+                                            item.time
+                                        )}
+                                    </p>
+                                </div>
+                            </div>
+                        )
+                    )
+                ) : (
+                    <p className="text-sm text-zinc-400">
+                        No timeline entries yet.
+                    </p>
+                )}
             </div>
         </div>
     )

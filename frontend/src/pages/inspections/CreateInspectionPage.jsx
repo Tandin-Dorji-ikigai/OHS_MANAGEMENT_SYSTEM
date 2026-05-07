@@ -40,7 +40,20 @@ const initialForm = {
 }
 
 function buildInitialResponses() {
-    return {}
+    return inspectionChecklist.reduce(
+        (acc, category) => {
+            category.items.forEach((item) => {
+                acc[item.id] = {
+                    id: item.id,
+                    status: 'na',
+                    notes: '',
+                }
+            })
+
+            return acc
+        },
+        {}
+    )
 }
 
 export default function CreateInspectionPage() {
@@ -53,12 +66,12 @@ export default function CreateInspectionPage() {
         loadDraft(DRAFT_KEY)
     const [form, setForm] = useState(
         draft?.data?.form ??
-            initialForm
+        initialForm
     )
     const [responses, setResponses] =
         useState(
             draft?.data?.responses ??
-                buildInitialResponses()
+            buildInitialResponses()
         )
     const [submitError, setSubmitError] =
         useState('')
@@ -111,7 +124,7 @@ export default function CreateInspectionPage() {
                                 responses[
                                     item.id
                                 ]?.status !==
-                                    'na'
+                                'na'
                         )
                         .map((item, index) => ({
                             checklistText:
@@ -201,7 +214,7 @@ export default function CreateInspectionPage() {
             items,
             findings,
         }
-
+        console.log('Submitting payload:', payload)
         if (!navigator.onLine) {
             addToQueue({
                 module: 'inspection',

@@ -6,22 +6,55 @@ import {
 import { toast } from 'react-hot-toast'
 
 import {
-    addIncidentInvestigation,
+    approveIncident,
+    assignInvestigator,
+    closeIncident,
+    createIncidentEscalation,
     createIncident,
     getIncidentById,
+    getIncidentEvidence,
     getIncidents,
+    rejectIncident,
+    saveIncidentManagementReview,
     transitionIncident,
     updateIncident,
+    uploadIncidentEvidence,
+    addIncidentInvestigation,
 } from '../services/incidentService'
 import {
     getErrorMessage,
 } from '../utils/api'
 
+const dashboardKeys = [
+    ['dashboard'],
+    ['dashboard-metrics'],
+    ['recent-incidents'],
+    ['pending-approvals'],
+    ['workflow-alerts'],
+    ['high-risk-sites'],
+    ['recent-activity'],
+]
+
+function invalidateDashboard(
+    queryClient
+) {
+    dashboardKeys.forEach(
+        (queryKey) => {
+            queryClient.invalidateQueries({
+                queryKey,
+            })
+        }
+    )
+}
+
 export function useIncidents(
     params = {}
 ) {
     return useQuery({
-        queryKey: ['incidents', params],
+        queryKey: [
+            'incidents',
+            params,
+        ],
         queryFn: () =>
             getIncidents(params),
         staleTime: 60 * 1000,
@@ -33,6 +66,20 @@ export function useIncident(id) {
         queryKey: ['incident', id],
         queryFn: () =>
             getIncidentById(id),
+        enabled: Boolean(id),
+    })
+}
+
+export function useIncidentEvidence(
+    id
+) {
+    return useQuery({
+        queryKey: [
+            'incident-evidence',
+            id,
+        ],
+        queryFn: () =>
+            getIncidentEvidence(id),
         enabled: Boolean(id),
     })
 }
@@ -95,9 +142,9 @@ export function useCreateIncident() {
             queryClient.invalidateQueries({
                 queryKey: ['incidents'],
             })
-            queryClient.invalidateQueries({
-                queryKey: ['dashboard'],
-            })
+            invalidateDashboard(
+                queryClient
+            )
             toast.success(
                 'Incident created.'
             )
@@ -128,6 +175,9 @@ export function useUpdateIncident() {
                     variables.id,
                 ],
             })
+            invalidateDashboard(
+                queryClient
+            )
             toast.success(
                 'Incident updated.'
             )
@@ -160,8 +210,136 @@ export function useAddIncidentInvestigation() {
                     variables.id,
                 ],
             })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incidents',
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
             toast.success(
                 'Investigation recorded.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useAssignInvestigator() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            assignInvestigator(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incidents',
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Investigator assigned.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useSaveIncidentManagementReview() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            saveIncidentManagementReview(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incidents',
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Management review saved.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useCreateIncidentEscalation() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            createIncidentEscalation(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incidents',
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Escalation recorded.'
             )
         },
         onError: (error) => {
@@ -185,6 +363,61 @@ export function useTransitionIncident() {
                 id,
                 payload
             ),
+        onMutate: async ({
+            id,
+            payload,
+        }) => {
+            await queryClient.cancelQueries({
+                queryKey: [
+                    'incident',
+                    id,
+                ],
+            })
+
+            const previous =
+                queryClient.getQueryData([
+                    'incident',
+                    id,
+                ])
+
+            queryClient.setQueryData(
+                [
+                    'incident',
+                    id,
+                ],
+                (current) =>
+                    current
+                        ? {
+                              ...current,
+                              incident: {
+                                  ...current.incident,
+                                  status:
+                                      payload.status,
+                              },
+                          }
+                        : current
+            )
+
+            return { previous, id }
+        },
+        onError: (
+            error,
+            _,
+            context
+        ) => {
+            if (context?.previous) {
+                queryClient.setQueryData(
+                    [
+                        'incident',
+                        context.id,
+                    ],
+                    context.previous
+                )
+            }
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({
                 queryKey: ['incidents'],
@@ -195,11 +428,158 @@ export function useTransitionIncident() {
                     variables.id,
                 ],
             })
-            queryClient.invalidateQueries({
-                queryKey: ['dashboard'],
-            })
+            invalidateDashboard(
+                queryClient
+            )
             toast.success(
                 'Incident workflow updated.'
+            )
+        },
+    })
+}
+
+export function useApproveIncident() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            approveIncident(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: ['incidents'],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Incident approved.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useRejectIncident() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            rejectIncident(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: ['incidents'],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Incident rejected.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useCloseIncident() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            closeIncident(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: ['incidents'],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            invalidateDashboard(
+                queryClient
+            )
+            toast.success(
+                'Incident closed.'
+            )
+        },
+        onError: (error) => {
+            toast.error(
+                getErrorMessage(error)
+            )
+        },
+    })
+}
+
+export function useUploadIncidentEvidence() {
+    const queryClient =
+        useQueryClient()
+
+    return useMutation({
+        mutationFn: ({
+            id,
+            payload,
+        }) =>
+            uploadIncidentEvidence(
+                id,
+                payload
+            ),
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident-evidence',
+                    variables.id,
+                ],
+            })
+            queryClient.invalidateQueries({
+                queryKey: [
+                    'incident',
+                    variables.id,
+                ],
+            })
+            toast.success(
+                'Evidence uploaded.'
             )
         },
         onError: (error) => {

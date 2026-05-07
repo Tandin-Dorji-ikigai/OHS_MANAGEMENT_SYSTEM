@@ -11,7 +11,6 @@ Minimize token usage while producing clean, correct code.
 - DO NOT assume full project context
 - DO NOT process entire codebase
 - DO NOT rewrite full files
-- Return ONLY modified or relevant parts
 
 ---
 

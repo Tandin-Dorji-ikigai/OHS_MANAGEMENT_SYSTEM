@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Incident, IncidentInvestigation, Site, User, Role } = require('../models');
+const { Incident, IncidentEscalation, IncidentInvestigation, Site, User, Role } = require('../models');
 const AppError = require('../utils/AppError');
 const { getPagination, getPagingData } = require('../utils/pagination');
 const { buildSiteScopeWhere } = require('../utils/scope');
@@ -11,8 +11,42 @@ const { createIncidentCorrectiveActions } = require('./correctiveActionAutomatio
 
 const incidentInclude = [
   { model: Site, as: 'site' },
-  { model: IncidentInvestigation, as: 'investigations', include: [{ model: User, as: 'investigator' }] }
+  { model: User, as: 'assignedInvestigator' },
+  { model: User, as: 'managementReviewer' },
+  { model: IncidentInvestigation, as: 'investigations', include: [{ model: User, as: 'investigator' }] },
+  { model: IncidentEscalation, as: 'escalations', include: [{ model: User, as: 'triggeredByUser' }] }
 ];
+
+const normalizePriority = (value) => {
+  if (!value) return null;
+  return String(value).trim().toLowerCase();
+};
+
+const createEscalationRecord = async (incident, payload, user) => {
+  const escalation = await IncidentEscalation.create({
+    incidentId: incident.id,
+    escalationType: payload.escalationType,
+    escalationLevel: payload.escalationLevel,
+    reason: payload.reason,
+    triggeredBy: user?.id || null,
+    triggeredAt: payload.triggeredAt || new Date(),
+    metadata: payload.metadata || {}
+  });
+
+  await logAudit({
+    moduleName: 'incident',
+    recordId: incident.id,
+    action: 'escalation_created',
+    comments: payload.reason,
+    metadata: {
+      escalationType: payload.escalationType,
+      escalationLevel: payload.escalationLevel
+    },
+    actionBy: user?.id || incident.createdBy
+  });
+
+  return escalation;
+};
 
 const listIncidents = async (query, user) => {
   const { page, limit, offset } = getPagination(query);
@@ -24,7 +58,11 @@ const listIncidents = async (query, user) => {
 
   const { rows, count } = await Incident.findAndCountAll({
     where,
-    include: [{ model: Site, as: 'site' }, { model: User, as: 'creator' }],
+    include: [
+      { model: Site, as: 'site' },
+      { model: User, as: 'creator' },
+      { model: User, as: 'assignedInvestigator' }
+    ],
     limit,
     offset,
     order: [['eventDate', 'DESC']]
@@ -59,6 +97,7 @@ const createIncident = async (payload, user) => {
   const incident = await Incident.create({
     ...incidentPayload,
     urgentFlag: incidentPayload.severity === 'critical',
+    investigationPriority: normalizePriority(incidentPayload.investigationPriority),
     createdBy: user.id
   });
 
@@ -84,6 +123,17 @@ const createIncident = async (payload, user) => {
         moduleName: 'incident',
         recordId: incident.id
       }
+    );
+
+    await createEscalationRecord(
+      incident,
+      {
+        escalationType: 'critical_incident',
+        escalationLevel: 'hq_immediate',
+        reason: `Critical incident reported at ${incident.location}`,
+        metadata: { severity: incident.severity }
+      },
+      user
     );
 
     await createIncidentCorrectiveActions({
@@ -125,6 +175,10 @@ const updateIncident = async (id, payload, user) => {
 
   await incident.update({
     ...payload,
+    investigationPriority:
+      payload.investigationPriority !== undefined
+        ? normalizePriority(payload.investigationPriority)
+        : incident.investigationPriority,
     urgentFlag: payload.severity ? payload.severity === 'critical' : incident.urgentFlag,
     updatedBy: user.id
   });
@@ -138,6 +192,52 @@ const updateIncident = async (id, payload, user) => {
   });
 
   return Incident.findByPk(id, { include: incidentInclude });
+};
+
+const assignInvestigator = async (incidentId, payload, user) => {
+  const incident = await Incident.findOne({
+    where: { id: incidentId, ...buildSiteScopeWhere(user) }
+  });
+
+  if (!incident) {
+    throw new AppError('Incident not found', 404);
+  }
+
+  if (![ROLES.FIELD_SAFETY_OFFICER, ROLES.HQ_SAFETY_OFFICER].includes(user.roleName)) {
+    throw new AppError('Only safety officers can assign investigators', 403);
+  }
+
+  const investigator = await User.findByPk(payload.investigatorId, {
+    include: [{ model: Role, as: 'role' }]
+  });
+
+  if (!investigator) {
+    throw new AppError('Investigator not found', 404);
+  }
+
+  await incident.update({
+    assignedInvestigatorId: payload.investigatorId,
+    investigationPriority: normalizePriority(payload.investigationPriority) || incident.investigationPriority,
+    investigationDueDate: payload.investigationDueDate || incident.investigationDueDate,
+    updatedBy: user.id
+  });
+
+  await logAudit({
+    moduleName: 'incident',
+    recordId: incidentId,
+    action: 'investigator_assigned',
+    comments: payload.comments || 'Investigator assigned',
+    metadata: {
+      investigatorId: payload.investigatorId,
+      investigationPriority: normalizePriority(payload.investigationPriority),
+      investigationDueDate: payload.investigationDueDate || null
+    },
+    actionBy: user.id
+  });
+
+  await createNotificationForInvestigator(investigator.id, incident);
+
+  return Incident.findByPk(incidentId, { include: incidentInclude });
 };
 
 const addInvestigation = async (incidentId, payload, user) => {
@@ -166,6 +266,70 @@ const addInvestigation = async (incidentId, payload, user) => {
   });
 
   return investigation;
+};
+
+const saveManagementReview = async (incidentId, payload, user) => {
+  const incident = await Incident.findOne({
+    where: { id: incidentId, ...buildSiteScopeWhere(user) }
+  });
+
+  if (!incident) {
+    throw new AppError('Incident not found', 404);
+  }
+
+  if (user.roleName !== ROLES.HQ_SAFETY_OFFICER) {
+    throw new AppError('Only HQ Safety Officers can save management reviews', 403);
+  }
+
+  await incident.update({
+    managementReviewComments: payload.managementReviewComments,
+    managementReviewedAt: new Date(),
+    managementReviewedBy: user.id,
+    updatedBy: user.id
+  });
+
+  await logAudit({
+    moduleName: 'incident',
+    recordId: incidentId,
+    action: 'management_review_saved',
+    comments: payload.managementReviewComments,
+    actionBy: user.id
+  });
+
+  if (payload.escalate) {
+    await createEscalationRecord(
+      incident,
+      {
+        escalationType: 'management_review',
+        escalationLevel: 'hq_review',
+        reason: payload.escalationReason || payload.managementReviewComments,
+        metadata: {
+          source: 'management_review'
+        }
+      },
+      user
+    );
+  }
+
+  return Incident.findByPk(incidentId, { include: incidentInclude });
+};
+
+const createEscalation = async (incidentId, payload, user) => {
+  const incident = await Incident.findOne({
+    where: { id: incidentId, ...buildSiteScopeWhere(user) }
+  });
+
+  if (!incident) {
+    throw new AppError('Incident not found', 404);
+  }
+
+  if (![ROLES.FIELD_SAFETY_OFFICER, ROLES.HQ_SAFETY_OFFICER, ROLES.TOP_MANAGEMENT].includes(user.roleName)) {
+    throw new AppError('You are not allowed to escalate incidents', 403);
+  }
+
+  await createEscalationRecord(incident, payload, user);
+
+  return Incident.findByPk(incidentId, { include: incidentInclude });
 };
 
 const transitionIncident = async (id, { status, comments }, user) => {
@@ -197,6 +361,20 @@ const transitionIncident = async (id, { status, comments }, user) => {
     approvedAt: status === 'approved' ? new Date() : incident.approvedAt,
     approvedBy: status === 'approved' ? user.id : incident.approvedBy
   });
+
+  if (status === 'closed') {
+    await IncidentEscalation.update(
+      {
+        resolvedAt: new Date()
+      },
+      {
+        where: {
+          incidentId: id,
+          resolvedAt: null
+        }
+      }
+    );
+  }
 
   const actionMap = {
     submitted: 'submit',
@@ -231,11 +409,27 @@ const transitionIncident = async (id, { status, comments }, user) => {
   return Incident.findByPk(id, { include: incidentInclude });
 };
 
+async function createNotificationForInvestigator(investigatorId, incident) {
+  await notifyMany(
+    [investigatorId],
+    {
+      title: 'Incident investigation assigned',
+      message: `You were assigned to investigate incident at ${incident.location}`,
+      type: 'submission_created',
+      moduleName: 'incident',
+      recordId: incident.id
+    }
+  );
+}
+
 module.exports = {
   listIncidents,
   getIncidentById,
   createIncident,
   updateIncident,
+  assignInvestigator,
   addInvestigation,
+  saveManagementReview,
+  createEscalation,
   transitionIncident
 };

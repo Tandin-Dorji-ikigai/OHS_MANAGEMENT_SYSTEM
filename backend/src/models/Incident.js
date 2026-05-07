@@ -52,6 +52,36 @@ module.exports = (sequelize) =>
         allowNull: true,
         field: 'root_cause'
       },
+      assignedInvestigatorId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'assigned_investigator_id'
+      },
+      investigationPriority: {
+        type: DataTypes.ENUM('low', 'medium', 'high', 'critical'),
+        allowNull: true,
+        field: 'investigation_priority'
+      },
+      investigationDueDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: 'investigation_due_date'
+      },
+      managementReviewComments: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'management_review_comments'
+      },
+      managementReviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'management_reviewed_at'
+      },
+      managementReviewedBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'management_reviewed_by'
+      },
       status: {
         type: DataTypes.ENUM(...RECORD_STATUSES),
         allowNull: false,

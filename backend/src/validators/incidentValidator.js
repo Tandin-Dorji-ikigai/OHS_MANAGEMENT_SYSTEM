@@ -30,11 +30,24 @@ const incidentUpdateSchema = Joi.object({
   dueDate: Joi.date().iso().allow(null)
 }).min(1);
 
+const incidentAssignmentSchema = Joi.object({
+  investigatorId: Joi.string().uuid().required(),
+  investigationPriority: Joi.string().valid('low', 'medium', 'high', 'critical').allow(null),
+  investigationDueDate: Joi.date().iso().allow(null),
+  comments: Joi.string().allow('', null)
+});
+
 const incidentTransitionSchema = Joi.object({
   status: Joi.string()
     .valid('submitted', 'under_review', 'returned_for_correction', 'validated', 'approved', 'rejected', 'closed', 'draft')
     .required(),
   comments: Joi.string().allow('', null)
+});
+
+const incidentManagementReviewSchema = Joi.object({
+  managementReviewComments: Joi.string().required(),
+  escalate: Joi.boolean().default(false),
+  escalationReason: Joi.string().allow('', null)
 });
 
 const investigationSchema = Joi.object({
@@ -44,9 +57,19 @@ const investigationSchema = Joi.object({
   recommendations: Joi.string().allow('', null)
 });
 
+const incidentEscalationSchema = Joi.object({
+  escalationType: Joi.string().max(80).required(),
+  escalationLevel: Joi.string().max(80).required(),
+  reason: Joi.string().required(),
+  metadata: Joi.object().unknown(true).default({})
+});
+
 module.exports = {
   incidentSchema,
   incidentUpdateSchema,
+  incidentAssignmentSchema,
   incidentTransitionSchema,
+  incidentManagementReviewSchema,
+  incidentEscalationSchema,
   investigationSchema
 };

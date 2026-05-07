@@ -6,7 +6,14 @@ import {
     hasPermission,
 } from '../../utils/permissions'
 
-export default function IncidentApprovalPanel() {
+export default function IncidentApprovalPanel({
+    status,
+    onApprove,
+    onReject,
+    onRequestRevision,
+    onClose,
+    disabled = false,
+}) {
     const { user } = useAuth()
 
     if (
@@ -32,8 +39,14 @@ export default function IncidentApprovalPanel() {
             </div>
 
             <div className="flex flex-wrap gap-4">
-
                 <button
+                    type="button"
+                    onClick={onApprove}
+                    disabled={
+                        disabled ||
+                        status ===
+                            'approved'
+                    }
                     className="
             rounded-xl bg-emerald-500 px-6 py-3
             text-sm font-semibold text-white
@@ -44,6 +57,13 @@ export default function IncidentApprovalPanel() {
                 </button>
 
                 <button
+                    type="button"
+                    onClick={onReject}
+                    disabled={
+                        disabled ||
+                        status ===
+                            'rejected'
+                    }
                     className="
             rounded-xl bg-red-500 px-6 py-3
             text-sm font-semibold text-white
@@ -54,6 +74,16 @@ export default function IncidentApprovalPanel() {
                 </button>
 
                 <button
+                    type="button"
+                    onClick={onRequestRevision}
+                    disabled={
+                        disabled ||
+                        ![
+                            'submitted',
+                            'under_review',
+                            'validated',
+                        ].includes(status)
+                    }
                     className="
             rounded-xl border border-white/10
             px-6 py-3 text-sm font-medium
@@ -61,6 +91,23 @@ export default function IncidentApprovalPanel() {
           "
                 >
                     Request Revision
+                </button>
+
+                <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={
+                        disabled ||
+                        status !==
+                            'approved'
+                    }
+                    className="
+            rounded-xl border border-white/10
+            px-6 py-3 text-sm font-medium
+            hover:bg-white/[0.03]
+          "
+                >
+                    Close Incident
                 </button>
             </div>
         </div>

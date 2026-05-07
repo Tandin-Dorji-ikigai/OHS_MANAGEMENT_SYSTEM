@@ -27,6 +27,21 @@ const addInvestigation = asyncHandler(async (req, res) => {
   success(res, data, 'Investigation recorded', 201);
 });
 
+const assignInvestigator = asyncHandler(async (req, res) => {
+  const data = await incidentService.assignInvestigator(req.params.id, req.body, req.user);
+  success(res, data, 'Investigator assigned');
+});
+
+const saveManagementReview = asyncHandler(async (req, res) => {
+  const data = await incidentService.saveManagementReview(req.params.id, req.body, req.user);
+  success(res, data, 'Management review saved');
+});
+
+const createEscalation = asyncHandler(async (req, res) => {
+  const data = await incidentService.createEscalation(req.params.id, req.body, req.user);
+  success(res, data, 'Incident escalated', 201);
+});
+
 const transitionIncident = asyncHandler(async (req, res) => {
   const data = await incidentService.transitionIncident(req.params.id, req.body, req.user);
   success(res, data, 'Incident workflow updated');
@@ -38,5 +53,8 @@ module.exports = {
   createIncident,
   updateIncident,
   addInvestigation,
+  assignInvestigator,
+  saveManagementReview,
+  createEscalation,
   transitionIncident
 };

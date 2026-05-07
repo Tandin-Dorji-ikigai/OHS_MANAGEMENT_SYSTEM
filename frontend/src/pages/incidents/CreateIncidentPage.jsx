@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 
 import AppLayout from '../../components/layouts/AppLayout'
@@ -12,6 +13,7 @@ import RootCauseAnalysis from '../../components/incidents/RootCauseAnalysis'
 import IncidentEvidenceUpload from '../../components/incidents/IncidentEvidenceUpload'
 import {
     useCreateIncident,
+    useUploadIncidentEvidence,
 } from '../../hooks/useIncidents'
 import { useSites } from '../../hooks/useSites'
 import {
@@ -22,6 +24,9 @@ import {
     removeDraft,
     saveDraft,
 } from '../../offline/draftStorage'
+import {
+    retryOperation,
+} from '../../offline/retryManager'
 import {
     getErrorMessage,
 } from '../../utils/api'
@@ -45,10 +50,36 @@ const initialForm = {
     correctiveMeasures: '',
 }
 
+function validateForm(form) {
+    if (!form.title.trim()) {
+        return 'Incident title is required.'
+    }
+
+    if (!form.eventDate) {
+        return 'Incident date is required.'
+    }
+
+    if (!form.siteId) {
+        return 'Site is required.'
+    }
+
+    if (!form.location.trim()) {
+        return 'Location is required.'
+    }
+
+    if (!form.description.trim()) {
+        return 'Incident description is required.'
+    }
+
+    return ''
+}
+
 export default function CreateIncidentPage() {
     const navigate = useNavigate()
     const createIncidentMutation =
         useCreateIncident()
+    const uploadEvidenceMutation =
+        useUploadIncidentEvidence()
     const { data: siteData } =
         useSites()
     const draft =
@@ -56,8 +87,11 @@ export default function CreateIncidentPage() {
     const [form, setForm] = useState(
         draft?.data ?? initialForm
     )
+    const [files, setFiles] = useState([])
     const [submitError, setSubmitError] =
         useState('')
+    const [uploadProgress, setUploadProgress] =
+        useState({})
 
     const sites = siteData?.data ?? []
 
@@ -70,13 +104,34 @@ export default function CreateIncidentPage() {
 
     function persistDraft() {
         saveDraft(DRAFT_KEY, form)
+        toast.success('Draft saved.')
+    }
+
+    function handleFileChange(event) {
+        setFiles(
+            Array.from(
+                event.target.files ?? []
+            )
+        )
     }
 
     async function handleSubmit(
         event
     ) {
         event.preventDefault()
-        setSubmitError('')
+        const validationError =
+            validateForm(form)
+
+        setSubmitError(
+            validationError
+        )
+
+        if (validationError) {
+            toast.error(
+                validationError
+            )
+            return
+        }
 
         const payload = {
             siteId: form.siteId,
@@ -121,6 +176,11 @@ export default function CreateIncidentPage() {
                 payload,
             })
             persistDraft()
+            if (files.length) {
+                toast(
+                    'Evidence files will need to be uploaded when you are back online.'
+                )
+            }
             navigate(
                 '/incidents'
             )
@@ -128,8 +188,58 @@ export default function CreateIncidentPage() {
         }
 
         try {
-            await createIncidentMutation.mutateAsync(
-                payload
+            const createdIncident =
+                await createIncidentMutation.mutateAsync(
+                    payload
+                )
+
+            for (const file of files) {
+                await retryOperation(
+                    () =>
+                        uploadEvidenceMutation.mutateAsync(
+                            {
+                                id: createdIncident.id,
+                                payload: {
+                                    file,
+                                    siteId:
+                                        form.siteId,
+                                    onUploadProgress:
+                                        (
+                                            progressEvent
+                                        ) => {
+                                            const total =
+                                                progressEvent.total ||
+                                                0
+                                            const percent =
+                                                total
+                                                    ? Math.round(
+                                                          (progressEvent.loaded /
+                                                              total) *
+                                                              100
+                                                      )
+                                                    : 0
+
+                                            setUploadProgress(
+                                                (
+                                                    current
+                                                ) => ({
+                                                    ...current,
+                                                    [file.name]:
+                                                        percent,
+                                                })
+                                            )
+                                        },
+                                },
+                            }
+                        ),
+                    2
+                )
+            }
+
+            toast.success(
+                files.length
+                    ? 'Incident and evidence saved.'
+                    : 'Incident saved.'
             )
             removeDraft(DRAFT_KEY)
             navigate(
@@ -371,7 +481,20 @@ export default function CreateIncidentPage() {
                         }
                     />
 
-                    <IncidentEvidenceUpload />
+                    <IncidentEvidenceUpload
+                        files={files}
+                        onChange={
+                            handleFileChange
+                        }
+                        disabled={
+                            createIncidentMutation.isPending ||
+                            uploadEvidenceMutation.isPending
+                        }
+                        uploadProgress={
+                            uploadProgress
+                        }
+                        helperText="Images, videos, and PDFs are supported."
+                    />
 
                     {submitError ? (
                         <p className="text-sm text-red-400">

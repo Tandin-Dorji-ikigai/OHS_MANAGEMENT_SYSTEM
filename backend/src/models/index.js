@@ -14,6 +14,7 @@ const InspectionItem = require('./InspectionItem')(sequelize);
 const InspectionFinding = require('./InspectionFinding')(sequelize);
 const Incident = require('./Incident')(sequelize);
 const IncidentInvestigation = require('./IncidentInvestigation')(sequelize);
+const IncidentEscalation = require('./IncidentEscalation')(sequelize);
 const RiskAssessment = require('./RiskAssessment')(sequelize);
 const RiskItem = require('./RiskItem')(sequelize);
 const Training = require('./Training')(sequelize);
@@ -43,9 +44,14 @@ InspectionFinding.belongsTo(Inspection, { foreignKey: 'inspectionId', as: 'inspe
 
 Incident.belongsTo(Site, { foreignKey: 'siteId', as: 'site' });
 Incident.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
+Incident.belongsTo(User, { foreignKey: 'assignedInvestigatorId', as: 'assignedInvestigator' });
+Incident.belongsTo(User, { foreignKey: 'managementReviewedBy', as: 'managementReviewer' });
 Incident.hasMany(IncidentInvestigation, { foreignKey: 'incidentId', as: 'investigations' });
+Incident.hasMany(IncidentEscalation, { foreignKey: 'incidentId', as: 'escalations' });
 IncidentInvestigation.belongsTo(Incident, { foreignKey: 'incidentId', as: 'incident' });
 IncidentInvestigation.belongsTo(User, { foreignKey: 'investigatorId', as: 'investigator' });
+IncidentEscalation.belongsTo(Incident, { foreignKey: 'incidentId', as: 'incident' });
+IncidentEscalation.belongsTo(User, { foreignKey: 'triggeredBy', as: 'triggeredByUser' });
 
 RiskAssessment.belongsTo(Site, { foreignKey: 'siteId', as: 'site' });
 RiskAssessment.belongsTo(User, { foreignKey: 'createdBy', as: 'creator' });
@@ -80,6 +86,7 @@ module.exports = {
   InspectionFinding,
   Incident,
   IncidentInvestigation,
+  IncidentEscalation,
   RiskAssessment,
   RiskItem,
   Training,

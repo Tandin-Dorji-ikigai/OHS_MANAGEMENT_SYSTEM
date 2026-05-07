@@ -2,6 +2,10 @@ import {
     Eye,
     Plus,
 } from 'lucide-react'
+import {
+    useMemo,
+    useState,
+} from 'react'
 
 import { useNavigate } from 'react-router-dom'
 
@@ -11,6 +15,7 @@ import DataTable from '../../components/tables/DataTable'
 import TableHeader from '../../components/tables/TableHeader'
 
 import IncidentSeverityBadge from '../../components/incidents/IncidentSeverityBadge'
+import FormSelect from '../../components/forms/FormSelect'
 import {
     useIncidents,
 } from '../../hooks/useIncidents'
@@ -21,28 +26,45 @@ import {
 
 export default function IncidentListPage() {
     const navigate = useNavigate()
+    const [severity, setSeverity] =
+        useState('')
+    const [status, setStatus] =
+        useState('')
     const {
         data,
         isLoading,
         isError,
         refetch,
-    } = useIncidents()
+    } = useIncidents({
+        ...(severity
+            ? { severity }
+            : {}),
+        ...(status
+            ? { status }
+            : {}),
+    })
 
-    const incidents =
-        data?.data?.map((incident) => ({
-            id: incident.id,
-            title:
-                incident.location,
-            site:
-                incident.site?.name ??
-                'Unassigned site',
-            severity: formatLabel(
-                incident.severity
-            ),
-            status: formatLabel(
-                incident.status
-            ),
-        })) ?? []
+    const incidents = useMemo(
+        () =>
+            data?.data?.map(
+                (incident) => ({
+                    id: incident.id,
+                    title:
+                        incident.location,
+                    site:
+                        incident.site
+                            ?.name ??
+                        'Unassigned site',
+                    severity: formatLabel(
+                        incident.severity
+                    ),
+                    status: formatLabel(
+                        incident.status
+                    ),
+                })
+            ) ?? [],
+        [data]
+    )
 
     const columns = [
         {
@@ -100,20 +122,128 @@ export default function IncidentListPage() {
                 title="Incident Management"
                 description="Track and investigate safety incidents"
                 action={
-                    <button
-                        onClick={() =>
-                            navigate('/incidents/create')
-                        }
-                        className="
+                    <>
+                        <FormSelect
+                            label=""
+                            value={severity}
+                            onChange={(
+                                event
+                            ) =>
+                                setSeverity(
+                                    event
+                                        .target
+                                        .value
+                                )
+                            }
+                            options={[
+                                {
+                                    value: '',
+                                    label: 'All Severity',
+                                },
+                                {
+                                    value: 'minor',
+                                    label: 'Low',
+                                },
+                                {
+                                    value: 'moderate',
+                                    label: 'Medium',
+                                },
+                                {
+                                    value: 'major',
+                                    label: 'High',
+                                },
+                                {
+                                    value: 'critical',
+                                    label: 'Critical',
+                                },
+                            ]}
+                            getOptionLabel={(
+                                option
+                            ) =>
+                                option.label
+                            }
+                            getOptionValue={(
+                                option
+                            ) =>
+                                option.value
+                            }
+                            className="mt-0 h-11 min-w-[150px]"
+                        />
+
+                        <FormSelect
+                            label=""
+                            value={status}
+                            onChange={(
+                                event
+                            ) =>
+                                setStatus(
+                                    event
+                                        .target
+                                        .value
+                                )
+                            }
+                            options={[
+                                {
+                                    value: '',
+                                    label: 'All Status',
+                                },
+                                {
+                                    value: 'draft',
+                                    label: 'Draft',
+                                },
+                                {
+                                    value: 'submitted',
+                                    label: 'Reported',
+                                },
+                                {
+                                    value: 'under_review',
+                                    label: 'Investigating',
+                                },
+                                {
+                                    value: 'validated',
+                                    label: 'Pending HQ Review',
+                                },
+                                {
+                                    value: 'approved',
+                                    label: 'Approved',
+                                },
+                                {
+                                    value: 'rejected',
+                                    label: 'Rejected',
+                                },
+                                {
+                                    value: 'closed',
+                                    label: 'Closed',
+                                },
+                            ]}
+                            getOptionLabel={(
+                                option
+                            ) =>
+                                option.label
+                            }
+                            getOptionValue={(
+                                option
+                            ) =>
+                                option.value
+                            }
+                            className="mt-0 h-11 min-w-[180px]"
+                        />
+
+                        <button
+                            onClick={() =>
+                                navigate('/incidents/create')
+                            }
+                            className="
               flex items-center gap-2 rounded-xl bg-white
               px-5 py-3 text-sm font-semibold text-black
               hover:bg-zinc-200
             "
-                    >
-                        <Plus size={18} />
+                        >
+                            <Plus size={18} />
 
-                        Report Incident
-                    </button>
+                            Report Incident
+                        </button>
+                    </>
                 }
             />
 
